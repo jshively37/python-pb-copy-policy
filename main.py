@@ -74,6 +74,19 @@ def get_single_policy(policy_endpoint, id):
     return response
 
 
+def create_single_policy(policy_endpoint, id):
+    url = f"{BASE_API_URL}/{policy_endpoint}"
+
+    # Psedo code. We need to check error code and skip if rule already exists due to default rules.
+    try:
+        response = requests.post(url, headers=HEADERS)
+        response.raise_for_status()
+        return response
+    except requests.exceptions.HTTPError as e:
+        print(f"HTTP error occurred: {e}")
+    return None
+
+
 if __name__ == "__main__":
     if len(sys.argv) == 1:
         print(
