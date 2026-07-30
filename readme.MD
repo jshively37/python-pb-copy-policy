@@ -13,8 +13,8 @@ By using this software, you agree that:
 Use at your own discretion.
 
 ## Limitations:
-* Right now just copies to a file.
-* Phase 2 will be copy to another tenant.
+* Import is working but need to check if rule already exists and skip. This is causing issues with the baseline config rules.
+  * Created an issue and working through this right now.
 
 ## Creating a service account in Prisma Access
 
@@ -33,7 +33,7 @@ Create a Python virtual environment: python -m venv venv
 
 Activate the virtual environment: \
 Windows: .\venv\Scripts\activate \
-OSX: source venv/bin/activate \
+OSX: source venv/bin/activate
 
 Install the dependencies using `pip install -r requirements.txt`
 

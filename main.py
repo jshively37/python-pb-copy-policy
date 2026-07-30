@@ -71,8 +71,7 @@ def get_full_policy(policy_endpoint):
 
 def get_single_policy(policy_endpoint, id):
     url = f"{BASE_API_URL}/{policy_endpoint}/rules/{id}"
-    response = requests.get(url, headers=HEADERS).json()
-    return response
+    return requests.get(url, headers=HEADERS).json()
 
 
 def create_single_policy(policy_endpoint, rule):
@@ -132,6 +131,7 @@ if __name__ == "__main__":
     elif args.mode == "print":
         print(json.dumps(all_policy_rules, indent=2))
     elif args.mode == "import":
+        target_policy_rules = {}
         target_tsg_id = os.environ.get("TARGET_TSG_ID")
         target_client_id = os.environ.get("TARGET_CLIENT_ID")
         target_secret_id = os.environ.get("TARGET_SECRET_ID")
@@ -140,6 +140,10 @@ if __name__ == "__main__":
                 "Please set TARGET_TSG_ID, TARGET_CLIENT_ID, and TARGET_SECRET_ID in the .env file for import mode."
             )
             sys.exit(1)
+        # Get target rules and build a list of the configured names.
+        # When creating a new rule, if the name already exists we will skip creating it to avoid duplicates.
+
+        # Create rules in the target tenant
         for policy_endpoint, rules in all_policy_rules.items():
             for rule in rules:
                 rule = clean_rule(rule)
