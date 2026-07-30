@@ -78,7 +78,6 @@ def get_single_policy(policy_endpoint, id):
 def create_single_policy(policy_endpoint, rule):
     url = f"{BASE_API_URL}/{policy_endpoint}/rules"
 
-    # Psedo code. We need to check error code and skip if rule already exists due to default rules.
     try:
         payload = json.dumps(rule)
         response = requests.post(url, data=payload, headers=HEADERS)
