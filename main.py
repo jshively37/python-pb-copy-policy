@@ -82,10 +82,10 @@ def create_single_policy(policy_endpoint, rule):
         payload = json.dumps(rule)
         response = requests.post(url, data=payload, headers=HEADERS)
         response.raise_for_status()
-        return response.json()
+        print(f"Successfully created rule: {rule.get('name', 'Unknown')} in section: {policy_endpoint}")
     except requests.exceptions.HTTPError as e:
         print(f"HTTP error occurred: {e} for rule: {rule.get('name', 'Unknown')}")
-    return None
+
 
 
 def clean_rule(rule):
@@ -141,5 +141,4 @@ if __name__ == "__main__":
         for policy_endpoint, rules in all_policy_rules.items():
             for rule in rules:
                 rule = clean_rule(rule)
-                response = create_single_policy(policy_endpoint, rule)
-                print(response)
+                create_single_policy(policy_endpoint, rule)
