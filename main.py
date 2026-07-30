@@ -12,6 +12,7 @@ BASE_API_URL = "https://api.sase.paloaltonetworks.com/seb-api/v1/policy"
 
 
 HEADERS = {
+    'Content-Type': 'application/json',
     "Accept": "application/json",
 }
 
@@ -74,18 +75,25 @@ def get_single_policy(policy_endpoint, id):
     return response
 
 
-def create_single_policy(policy_endpoint, id):
-    url = f"{BASE_API_URL}/{policy_endpoint}"
+def create_single_policy(policy_endpoint, rule):
+    url = f"{BASE_API_URL}/{policy_endpoint}/rules"
 
     # Psedo code. We need to check error code and skip if rule already exists due to default rules.
     try:
-        response = requests.post(url, headers=HEADERS)
+        payload = json.dumps(rule)
+        response = requests.post(url, data=payload, headers=HEADERS)
         response.raise_for_status()
-        return response
+        return response.json()
     except requests.exceptions.HTTPError as e:
-        print(f"HTTP error occurred: {e}")
+        print(f"HTTP error occurred: {e} for rule: {rule.get('name', 'Unknown')}")
     return None
 
+
+def clean_rule(rule):
+    fields_to_remove = ["id", "created_at", "updated_at", "metadata", "priority"]
+    for field in fields_to_remove:
+        rule.pop(field, None)
+    return rule
 
 if __name__ == "__main__":
     if len(sys.argv) == 1:
@@ -123,4 +131,16 @@ if __name__ == "__main__":
     elif args.mode == "print":
         print(json.dumps(all_policy_rules, indent=2))
     elif args.mode == "import":
-        print("Importing policy from tenant to tenant is not yet implemented.")
+        target_tsg_id = os.environ.get("TARGET_TSG_ID")
+        target_client_id = os.environ.get("TARGET_CLIENT_ID")
+        target_secret_id = os.environ.get("TARGET_SECRET_ID")
+        if not all([target_tsg_id, target_client_id, target_secret_id]):
+            print(
+                "Please set TARGET_TSG_ID, TARGET_CLIENT_ID, and TARGET_SECRET_ID in the .env file for import mode."
+            )
+            sys.exit(1)
+        for policy_endpoint, rules in all_policy_rules.items():
+            for rule in rules:
+                rule = clean_rule(rule)
+                response = create_single_policy(policy_endpoint, rule)
+                print(response)
