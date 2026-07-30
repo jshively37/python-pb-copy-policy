@@ -39,4 +39,11 @@ Install the dependencies using `pip install -r requirements.txt`
 
 Copy `env.example` to `.env` and populate your variables in this file generated while creating the service account. The .env is included in the .gitignore to ensure it does not accidentally get checked into a git repo.
 
-Run: `python main.py`
+If you wish to use `import` CLI argument you will need to populate the `TARGET_TSG_ID`, `TARGET_CLIENT_ID`, and `TARGET_SECRET_ID` fields.
+
+Run: `python main.py` and pass in the approriate CLI argument (You can use `python main.py --help` to see all available options):
+`print`: Print all the polices to the screen.
+`export`: Save the policies in a JSON file in the location defined by: `OUTPUT_DIR` and `OUTPUT_FILE`
+`import`: Copy the policy from one tenant to another tenant. Make sure you've defined both sets of credentials in `.env`.
+
+For example to print the policy to the screen you would enter in `python main.py print`
