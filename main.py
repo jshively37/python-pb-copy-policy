@@ -2,9 +2,10 @@ import argparse
 import os
 import json
 import sys
-
 import requests
+
 from dotenv import load_dotenv
+from pathlib import Path
 
 BASE_AUTH_URL = "https://auth.apps.paloaltonetworks.com/auth/v1/oauth2/access_token"
 BASE_API_URL = "https://api.sase.paloaltonetworks.com/seb-api/v1/policy"
@@ -31,6 +32,7 @@ CLIENT_ID = os.environ.get("CLIENT_ID")
 SECRET_ID = os.environ.get("SECRET_ID")
 
 OUTPUT_DIR = "output"
+OUTPUT_FILE = "all_policy_rules.json"
 
 
 def parse_args():
@@ -99,8 +101,12 @@ if __name__ == "__main__":
             all_policy_rules[section].append(response)
 
     if args.mode == "export":
-        with open(f"{OUTPUT_DIR}/all_policy_rules.json", "w", encoding="utf-8") as f:
+        if not os.path.exists(OUTPUT_DIR):
+            print(f"Creating output directory: {OUTPUT_DIR}")
+            os.makedirs(OUTPUT_DIR)
+        with open(f"{OUTPUT_DIR}/{OUTPUT_FILE}", "w", encoding="utf-8") as f:
             json.dump(all_policy_rules, f, indent=2)
+        print(f"Policy exported to {OUTPUT_DIR}/{OUTPUT_FILE}")
     elif args.mode == "print":
         print(json.dumps(all_policy_rules, indent=2))
     elif args.mode == "import":
