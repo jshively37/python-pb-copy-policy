@@ -12,7 +12,7 @@ BASE_API_URL = "https://api.sase.paloaltonetworks.com/seb-api/v1/policy"
 
 
 HEADERS = {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
     "Accept": "application/json",
 }
 
@@ -82,10 +82,11 @@ def create_single_policy(policy_endpoint, rule):
         payload = json.dumps(rule)
         response = requests.post(url, data=payload, headers=HEADERS)
         response.raise_for_status()
-        print(f"Successfully created rule: {rule.get('name', 'Unknown')} in section: {policy_endpoint}")
+        print(
+            f"Successfully created rule: {rule.get('name', 'Unknown')} in section: {policy_endpoint}"
+        )
     except requests.exceptions.HTTPError as e:
         print(f"HTTP error occurred: {e} for rule: {rule.get('name', 'Unknown')}")
-
 
 
 def clean_rule(rule):
@@ -93,6 +94,7 @@ def clean_rule(rule):
     for field in fields_to_remove:
         rule.pop(field, None)
     return rule
+
 
 if __name__ == "__main__":
     if len(sys.argv) == 1:
