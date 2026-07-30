@@ -171,3 +171,6 @@ Pipfile
 
 # Docker
 .bash_history
+
+# VS Code
+.vscode/
