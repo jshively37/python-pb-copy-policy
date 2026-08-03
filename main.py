@@ -1,25 +1,13 @@
 import argparse
-import os
 import json
+import os
 import sys
-import requests
-
-from dotenv import load_dotenv
 from pathlib import Path
+import requests
+from dotenv import load_dotenv
 
 BASE_AUTH_URL = "https://auth.apps.paloaltonetworks.com/auth/v1/oauth2/access_token"
 BASE_API_URL = "https://api.sase.paloaltonetworks.com/seb-api/v1/policy"
-
-
-HEADERS = {
-    "Content-Type": "application/json",
-    "Accept": "application/json",
-}
-
-AUTH_HEADERS = {
-    "Content-Type": "application/x-www-form-urlencoded",
-    "Accept": "application/json",
-}
 
 POLICY_ENDPOINTS = {
     "security": "security",
@@ -27,150 +15,170 @@ POLICY_ENDPOINTS = {
     "customization": "customization",
 }
 
-DEFAULT_RULES = [
-    "Browser Security - baseline",
-    "Block private applications",
-    "Access & Data - baseline",
-    "Browser Customization - baseline",
-    "Block malicious domains & URLs",
-]
+OUTPUT_DIR = Path("output")
+OUTPUT_FILE = OUTPUT_DIR / "all_policy_rules.json"
+
+FIELDS_TO_CLEAN = {"id", "created_at", "updated_at", "metadata", "priority"}
 
 
-load_dotenv()
-TSG_ID = os.environ.get("TSG_ID")
-CLIENT_ID = os.environ.get("CLIENT_ID")
-SECRET_ID = os.environ.get("SECRET_ID")
+class PrismaPolicyClient:
+    """Encapsulates API operations for a specific tenant session."""
 
-OUTPUT_DIR = "output"
-OUTPUT_FILE = "all_policy_rules.json"
+    def __init__(self, tsg_id: str, client_id: str, secret_id: str):
+        self.tsg_id = tsg_id
+        self.session = requests.Session()
+        self.session.headers.update(
+            {"Content-Type": "application/json", "Accept": "application/json"}
+        )
+        self._authenticate(client_id, secret_id)
+
+    def _authenticate(self, client_id: str, secret_id: str) -> None:
+        auth_url = f"{BASE_AUTH_URL}?grant_type=client_credentials&scope:tsg_id:{self.tsg_id}"
+        auth_headers = {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept": "application/json",
+        }
+
+        response = requests.post(
+            auth_url,
+            headers=auth_headers,
+            auth=(client_id, secret_id),
+        )
+        response.raise_for_status()
+
+        token = response.json().get("access_token")
+        if not token:
+            raise KeyError("Access token was missing from authentication response.")
+
+        self.session.headers.update({"Authorization": f"Bearer {token}"})
+
+    def get_rules_summary(self, endpoint: str) -> list[dict]:
+        """Fetch the high-level list of rules (with IDs) for a policy section."""
+        url = f"{BASE_API_URL}/{endpoint}"
+        response = self.session.get(url)
+        response.raise_for_status()
+        return response.json().get("data", [])
+
+    def get_single_rule(self, endpoint: str, rule_id: str) -> dict:
+        """Fetch the full detail for a single policy rule by ID."""
+        url = f"{BASE_API_URL}/{endpoint}/rules/{rule_id}"
+        response = self.session.get(url)
+        response.raise_for_status()
+        return response.json()
+
+    def create_single_rule(self, endpoint: str, rule: dict) -> None:
+        """Create a single policy rule."""
+        url = f"{BASE_API_URL}/{endpoint}/rules"
+        rule_name = rule.get("name", "Unknown")
+
+        try:
+            response = self.session.post(url, json=rule)
+            response.raise_for_status()
+            print(f"Successfully created rule: '{rule_name}' in section: {endpoint}")
+        except requests.exceptions.HTTPError as e:
+            print(f"HTTP error creating rule '{rule_name}' in {endpoint}: {e}")
+
+    def fetch_all_detailed_policies(self) -> dict[str, list[dict]]:
+        """Utility to fetch all detailed rules across all configured endpoints."""
+        all_rules = {}
+        for section in POLICY_ENDPOINTS.values():
+            summaries = self.get_rules_summary(section)
+            all_rules[section] = []
+
+            for rule in summaries:
+                rule_id = rule.get("id")
+                if not rule_id:
+                    continue
+                print(f"Getting policy for section: {section}, id: {rule_id}")
+                detailed_rule = self.get_single_rule(section, rule_id)
+                all_rules[section].append(detailed_rule)
+
+        return all_rules
 
 
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Prisma Browser Policy Management Tool"
     )
-    subparsers = parser.add_subparsers(dest="mode", required=True, help="Select mode")
-    subparsers.add_parser(
-        "export", description="Copy policy to a JSON file for later use or analysis"
+    parser.add_argument(
+        "mode",
+        choices=["export", "print", "import"],
+        help="Mode of operation: export to file, print to console, or import to another tenant.",
     )
-    subparsers.add_parser("print", description="Print policy to console")
-    subparsers.add_parser("import", description="Import policy from tenant to tenant")
     return parser.parse_args()
 
 
-def create_token():
-    auth_url = f"{BASE_AUTH_URL}?grant_type=client_credentials&scope:tsg_id:{TSG_ID}"
-
-    token = requests.request(
-        method="POST",
-        url=auth_url,
-        headers=AUTH_HEADERS,
-        auth=(CLIENT_ID, SECRET_ID),
-    ).json()
-    HEADERS.update({"Authorization": f'Bearer {token["access_token"]}'})
+def clean_rule(rule: dict) -> dict:
+    """Remove system metadata fields from a rule dictionary."""
+    return {k: v for k, v in rule.items() if k not in FIELDS_TO_CLEAN}
 
 
-def get_full_policy(policy_endpoint):
-    _ = []
-    url = f"{BASE_API_URL}/{policy_endpoint}"
-    response = requests.get(url, headers=HEADERS).json()
-    _.extend(response.get("data", []))
-    return _
+def get_env_credentials(prefix: str = "") -> tuple[str, str, str]:
+    """Retrieve credential tuple from environment with optional prefix."""
+    tsg_id = os.environ.get(f"{prefix}TSG_ID")
+    client_id = os.environ.get(f"{prefix}CLIENT_ID")
+    secret_id = os.environ.get(f"{prefix}SECRET_ID")
 
-
-def get_single_policy(policy_endpoint, id):
-    url = f"{BASE_API_URL}/{policy_endpoint}/rules/{id}"
-    return requests.get(url, headers=HEADERS).json()
-
-
-def create_single_policy(policy_endpoint, rule):
-    url = f"{BASE_API_URL}/{policy_endpoint}/rules"
-
-    try:
-        payload = json.dumps(rule)
-        response = requests.post(url, data=payload, headers=HEADERS)
-        response.raise_for_status()
-        print(
-            f"Successfully created rule: {rule.get('name', 'Unknown')} in section: {policy_endpoint}"
-        )
-    except requests.exceptions.HTTPError as e:
-        print(f"HTTP error occurred: {e} for rule: {rule.get('name', 'Unknown')}")
-
-
-def clean_rule(rule):
-    fields_to_remove = ["id", "created_at", "updated_at", "metadata", "priority"]
-    for field in fields_to_remove:
-        rule.pop(field, None)
-    return rule
-
-
-if __name__ == "__main__":
-    if len(sys.argv) == 1:
-        print(
-            "Please provide either 'export', 'print', or 'import' when running the script.\nFor example: python main.py export"
-        )
+    if not all([tsg_id, client_id, secret_id]):
+        missing = [
+            f"{prefix}{name}"
+            for name, val in [("TSG_ID", tsg_id), ("CLIENT_ID", client_id), ("SECRET_ID", secret_id)]
+            if not val
+        ]
+        print(f"Error: Missing environment variables: {', '.join(missing)}")
         sys.exit(1)
-    args = parse_args()
-    create_token()
-    all_policy_ids = {}
-    all_policy_rules = {}
-    for policy_endpoint in POLICY_ENDPOINTS.values():
-        _ = []
-        _.extend(get_full_policy(policy_endpoint))
-        all_policy_ids[policy_endpoint] = _
-    ids_by_section = {
-        key: [rule["id"] for rule in rules if "id" in rule]
-        for key, rules in all_policy_ids.items()
-    }
 
-    for section, ids in ids_by_section.items():
-        all_policy_rules[section] = []
-        for id in ids:
-            print(f"Getting policy for section: {section}, id: {id}")
-            response = get_single_policy(section, id)
-            all_policy_rules[section].append(response)
+    return tsg_id, client_id, secret_id
+
+
+def main():
+    load_dotenv()
+    args = parse_args()
+
+    # Setup source client
+    src_tsg, src_client_id, src_secret = get_env_credentials()
+    src_client = PrismaPolicyClient(src_tsg, src_client_id, src_secret)
+
+    # Fetch full policies from source tenant
+    source_policies = src_client.fetch_all_detailed_policies()
 
     if args.mode == "export":
-        if not os.path.exists(OUTPUT_DIR):
-            print(f"Creating output directory: {OUTPUT_DIR}")
-            os.makedirs(OUTPUT_DIR)
-        with open(f"{OUTPUT_DIR}/{OUTPUT_FILE}", "w", encoding="utf-8") as f:
-            json.dump(all_policy_rules, f, indent=2)
-        print(f"Policy exported to {OUTPUT_DIR}/{OUTPUT_FILE}")
+        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
+            json.dump(source_policies, f, indent=2)
+        print(f"Policy successfully exported to {OUTPUT_FILE}")
+
     elif args.mode == "print":
-        print(json.dumps(all_policy_rules, indent=2))
+        print(json.dumps(source_policies, indent=2))
+
     elif args.mode == "import":
-        target_policy_rules = {}
-        target_tsg_id = os.environ.get("TARGET_TSG_ID")
-        target_client_id = os.environ.get("TARGET_CLIENT_ID")
-        target_secret_id = os.environ.get("TARGET_SECRET_ID")
-        if not all([target_tsg_id, target_client_id, target_secret_id]):
-            print(
-                "Please set TARGET_TSG_ID, TARGET_CLIENT_ID, and TARGET_SECRET_ID in the .env file for import mode."
-            )
-            sys.exit(1)
+        # Setup target tenant client
+        tgt_tsg, tgt_client_id, tgt_secret = get_env_credentials(prefix="TARGET_")
+        tgt_client = PrismaPolicyClient(tgt_tsg, tgt_client_id, tgt_secret)
 
-        for policy_endpoint in POLICY_ENDPOINTS.values():
-            _ = []
-            _.extend(get_full_policy(policy_endpoint))
-            target_policy_rules[policy_endpoint] = _
-
-        target_names = [
+        # Collect existing rule names in target tenant for constant-time existence checks
+        target_rule_names = {
             rule["name"]
-            for rules in target_policy_rules.values()
-            for rule in rules
+            for endpoint in POLICY_ENDPOINTS.values()
+            for rule in tgt_client.get_rules_summary(endpoint)
             if "name" in rule
-        ]
+        }
 
-        for policy_endpoint, rules in all_policy_rules.items():
+
+        # Process and import missing rules
+        for endpoint, rules in source_policies.items():
             for raw_rule in rules:
                 rule = clean_rule(raw_rule)
                 rule_name = rule.get("name")
 
-                if rule_name and rule_name not in target_names:
-                    print(f"Creating rule: {rule_name} in section: {policy_endpoint}")
-                    create_single_policy(policy_endpoint, rule)
+                if rule_name and rule_name not in target_rule_names:
+                    print(f"Creating rule: '{rule_name}' in section: {endpoint}")
+                    tgt_client.create_single_rule(endpoint, rule)
                 else:
                     print(
-                        f"Skipping rule: {rule_name} in section: {policy_endpoint} as it already exists in the target tenant."
+                        f"Skipping rule: '{rule_name}' in section: {endpoint} (Already exists in target)"
                     )
+
+
+if __name__ == "__main__":
+    main()
