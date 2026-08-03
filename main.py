@@ -27,6 +27,15 @@ POLICY_ENDPOINTS = {
     "customization": "customization",
 }
 
+DEFAULT_RULES = [
+    "Browser Security - baseline",
+    "Block private applications",
+    "Access & Data - baseline",
+    "Browser Customization - baseline",
+    "Block malicious domains & URLs",
+]
+
+
 load_dotenv()
 TSG_ID = os.environ.get("TSG_ID")
 CLIENT_ID = os.environ.get("CLIENT_ID")
@@ -140,11 +149,14 @@ if __name__ == "__main__":
                 "Please set TARGET_TSG_ID, TARGET_CLIENT_ID, and TARGET_SECRET_ID in the .env file for import mode."
             )
             sys.exit(1)
-        # Get target rules and build a list of the configured names.
-        # When creating a new rule, if the name already exists we will skip creating it to avoid duplicates.
-
-        # Create rules in the target tenant
+        # Temp fix while we work on logic to pull existing rules and compare.
+        # Stops creation of the default PB rules.
+        # Final solution will be to pull existing rules from target tenant and compare to avoid duplicates.
         for policy_endpoint, rules in all_policy_rules.items():
-            for rule in rules:
-                rule = clean_rule(rule)
-                create_single_policy(policy_endpoint, rule)
+            for raw_rule in rules:
+                rule = clean_rule(raw_rule)
+                rule_name = rule.get("name")
+
+                if rule_name and rule_name not in DEFAULT_RULES:
+                    print(f"Creating rule: {rule_name} in section: {policy_endpoint}")
+                    create_single_policy(policy_endpoint, rule)
