@@ -33,7 +33,9 @@ class PrismaPolicyClient:
         self._authenticate(client_id, secret_id)
 
     def _authenticate(self, client_id: str, secret_id: str) -> None:
-        auth_url = f"{BASE_AUTH_URL}?grant_type=client_credentials&scope:tsg_id:{self.tsg_id}"
+        auth_url = (
+            f"{BASE_AUTH_URL}?grant_type=client_credentials&scope:tsg_id:{self.tsg_id}"
+        )
         auth_headers = {
             "Content-Type": "application/x-www-form-urlencoded",
             "Accept": "application/json",
@@ -122,7 +124,11 @@ def get_env_credentials(prefix: str = "") -> tuple[str, str, str]:
     if not all([tsg_id, client_id, secret_id]):
         missing = [
             f"{prefix}{name}"
-            for name, val in [("TSG_ID", tsg_id), ("CLIENT_ID", client_id), ("SECRET_ID", secret_id)]
+            for name, val in [
+                ("TSG_ID", tsg_id),
+                ("CLIENT_ID", client_id),
+                ("SECRET_ID", secret_id),
+            ]
             if not val
         ]
         print(f"Error: Missing environment variables: {', '.join(missing)}")
@@ -135,11 +141,9 @@ def main():
     load_dotenv()
     args = parse_args()
 
-    # Setup source client
     src_tsg, src_client_id, src_secret = get_env_credentials()
     src_client = PrismaPolicyClient(src_tsg, src_client_id, src_secret)
 
-    # Fetch full policies from source tenant
     source_policies = src_client.fetch_all_detailed_policies()
 
     if args.mode == "export":
@@ -152,18 +156,15 @@ def main():
         print(json.dumps(source_policies, indent=2))
 
     elif args.mode == "import":
-        # Setup target tenant client
         tgt_tsg, tgt_client_id, tgt_secret = get_env_credentials(prefix="TARGET_")
         tgt_client = PrismaPolicyClient(tgt_tsg, tgt_client_id, tgt_secret)
 
-        # Collect existing rule names in target tenant for constant-time existence checks
         target_rule_names = {
             rule["name"]
             for endpoint in POLICY_ENDPOINTS.values()
             for rule in tgt_client.get_rules_summary(endpoint)
             if "name" in rule
         }
-
 
         # Process and import missing rules
         for endpoint, rules in source_policies.items():
