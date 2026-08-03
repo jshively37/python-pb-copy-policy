@@ -149,14 +149,28 @@ if __name__ == "__main__":
                 "Please set TARGET_TSG_ID, TARGET_CLIENT_ID, and TARGET_SECRET_ID in the .env file for import mode."
             )
             sys.exit(1)
-        # Temp fix while we work on logic to pull existing rules and compare.
-        # Stops creation of the default PB rules.
-        # Final solution will be to pull existing rules from target tenant and compare to avoid duplicates.
+
+        for policy_endpoint in POLICY_ENDPOINTS.values():
+            _ = []
+            _.extend(get_full_policy(policy_endpoint))
+            target_policy_rules[policy_endpoint] = _
+
+        target_names = [
+            rule["name"]
+            for rules in target_policy_rules.values()
+            for rule in rules
+            if "name" in rule
+        ]
+
         for policy_endpoint, rules in all_policy_rules.items():
             for raw_rule in rules:
                 rule = clean_rule(raw_rule)
                 rule_name = rule.get("name")
 
-                if rule_name and rule_name not in DEFAULT_RULES:
+                if rule_name and rule_name not in target_names:
                     print(f"Creating rule: {rule_name} in section: {policy_endpoint}")
                     create_single_policy(policy_endpoint, rule)
+                else:
+                    print(
+                        f"Skipping rule: {rule_name} in section: {policy_endpoint} as it already exists in the target tenant."
+                    )
